@@ -17,10 +17,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Instalar librerías
-        run: pip install requests beautifulsoup4
+      - name: Instalar Playwright y dependencias
+        run: |
+          pip install playwright requests
+          playwright install --with-deps chromium
 
-      - name: Ejecutar script de diagnóstico
+      - name: Ejecutar script con Navegador (Playwright)
         env:
           GIST_ID: "${{ secrets.GIST_ID }}"
           GH_TOKEN: "${{ secrets.GH_TOKEN }}"
@@ -29,30 +31,50 @@ jobs:
           python -c "
           import os
           import re
+          from playwright.sync_api import sync_playwright
           import requests
 
           web_url = os.environ['WEB_URL']
-          headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-          
-          try:
-              response = requests.get(web_url, headers=headers)
-              print(f'Estado HTTP: {response.status_code}')
-              html_content = response.text
+          gist_id = os.environ['GIST_ID']
+          token = os.environ['GH_TOKEN']
+
+          print('Abriendo navegador headless...')
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.goto(web_url, timeout=60000)
               
-              # Buscamos cualquier ocurrencia de tecnotv.club para ver qué trae la página
-              matches = re.findall(r'https?://[^\s\"<>]+', html_content)
-              print(f'Total de enlaces encontrados en HTML bruto: {len(matches)}')
+              # Esperamos a que cargue el contenido dinámico de la página
+              page.wait_for_timeout(5000)
               
-              # Intentar buscar el patrón específico de la lista
-              match = re.search(r'https?://[^\s\"\'<>]+/[a-zA-Z0-9]{4}/lista4\.m3u', html_content)
-              
-              if match:
-                  nuevo_enlace = match.group(0)
-                  print(f'¡Encontrado con éxito!: {nuevo_enlace}')
+              # Obtenemos todo el HTML ya renderizado con JavaScript ejecutado
+              html_content = page.content()
+              browser.close()
+
+          # Buscamos el enlace con la estructura de la lista
+          match = re.search(r'https?://[^\s\"\'<>]+/[a-zA-Z0-9]{4}/lista4\.m3u', html_content)
+
+          if match:
+              nuevo_enlace = match.group(0)
+              print(f'¡Enlace encontrado con éxito!: {nuevo_enlace}')
+
+              gist_url = f'https://api.github.com/gists/{gist_id}'
+              headers_gist = {
+                  'Authorization': f'Bearer {token}',
+                  'Accept': 'application/vnd.github+json'
+              }
+              data = {
+                  'files': {
+                      'lista.m3u': {
+                          'content': nuevo_enlace
+                      }
+                  }
+              }
+              r = requests.patch(gist_url, json=data, headers=headers_gist)
+              if r.status_code == 200:
+                  print('¡Gist actualizado con éxito!')
               else:
-                  print('El HTML bruto no muestra el enlace directo (posible carga por JavaScript).')
-                  # Imprimir parte del texto para inspección
-                  print(html_content[:500])
-          except Exception as e:
-              print(f'Error al conectar: {e}')
+                  print(f'Error al actualizar Gist: {r.status_code}')
+          else:
+              print('No se pudo encontrar el enlace ni siquiera con el navegador.')
           "
