@@ -20,11 +20,11 @@ jobs:
       - name: Instalar librerías
         run: pip install requests beautifulsoup4
 
-      - name: Ejecutar script
+      - name: Ejecutar script de diagnóstico
         env:
-          GIST_ID: "4fde1d491f5de81a0cc9aee598c01a53"
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          WEB_URL: "https://spinoff.link/listas-iptv-actualizadas-2025/"
+          GIST_ID: "${{ secrets.GIST_ID }}"
+          GH_TOKEN: "${{ secrets.GH_TOKEN }}"
+          WEB_URL: "https://tecnotv.club/"
         run: |
           python -c "
           import os
@@ -32,36 +32,27 @@ jobs:
           import requests
 
           web_url = os.environ['WEB_URL']
-          gist_id = os.environ['GIST_ID']
-          token = os.environ['GH_TOKEN']
-
-          headers = {'User-Agent': 'Mozilla/5.0'}
-          response = requests.get(web_url, headers=headers)
-          html_content = response.text
-
-          match = re.search(r'https?://[^\s\"\'<>]tecnotv[^\s\"\'<>]', html_content)
-
-          if match:
-              nuevo_enlace = match.group(0)
-              print(f'Enlace encontrado: {nuevo_enlace}')
-
-              gist_url = f'https://api.github.com/gists/{gist_id}'
-              headers_gist = {
-                  'Authorization': f'Bearer {token}',
-                  'Accept': 'application/vnd.github+json'
-              }
-              data = {
-                  'files': {
-                      'lista.m3u': {
-                          'content': nuevo_enlace
-                      }
-                  }
-              }
-              r = requests.patch(gist_url, json=data, headers=headers_gist)
-              if r.status_code == 200:
-                  print('¡Gist actualizado con éxito!')
+          headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+          
+          try:
+              response = requests.get(web_url, headers=headers)
+              print(f'Estado HTTP: {response.status_code}')
+              html_content = response.text
+              
+              # Buscamos cualquier ocurrencia de tecnotv.club para ver qué trae la página
+              matches = re.findall(r'https?://[^\s\"<>]+', html_content)
+              print(f'Total de enlaces encontrados en HTML bruto: {len(matches)}')
+              
+              # Intentar buscar el patrón específico de la lista
+              match = re.search(r'https?://[^\s\"\'<>]+/[a-zA-Z0-9]{4}/lista4\.m3u', html_content)
+              
+              if match:
+                  nuevo_enlace = match.group(0)
+                  print(f'¡Encontrado con éxito!: {nuevo_enlace}')
               else:
-                  print(f'Error al actualizar Gist: {r.status_code}')
-          else:
-              print('No se pudo encontrar el enlace en la página web.')
+                  print('El HTML bruto no muestra el enlace directo (posible carga por JavaScript).')
+                  # Imprimir parte del texto para inspección
+                  print(html_content[:500])
+          except Exception as e:
+              print(f'Error al conectar: {e}')
           "
