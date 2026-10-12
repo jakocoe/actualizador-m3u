@@ -1,0 +1,66 @@
+name: Actualizar Enlace M3U
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar librerías
+        run: pip install requests beautifulsoup4
+
+      - name: Ejecutar script
+        env:
+          GIST_ID: "4fde1d491f5de81a0cc9aee598c01a53"
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          WEB_URL: "https://spinoff.link/listas-iptv-actualizadas-2025/"
+        run: |
+          import os
+          import re
+          import requests
+
+          web_url = os.environ["WEB_URL"]
+          gist_id = os.environ["GIST_ID"]
+          token = os.environ["GH_TOKEN"]
+
+          headers = {"User-Agent": "Mozilla/5.0"}
+          response = requests.get(web_url, headers=headers)
+          html_content = response.text
+
+          match = re.search(r"https?://[^\s\"<>]+/[a-zA-Z0-9]{4}/[^\s\"<>]+", html_content)
+          
+          if match:
+              nuevo_enlace = match.group(0)
+              print(f"Enlace encontrado: {nuevo_enlace}")
+
+              gist_url = f"https://api.github.com/gists/{gist_id}"
+              headers_gist = {
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json"
+              }
+              data = {
+                  "files": {
+                      "lista.m3u": {
+                          "content": nuevo_enlace
+                      }
+                  }
+              }
+              r = requests.patch(gist_url, json=data, headers=headers_gist)
+              if r.status_code == 200:
+                  print("¡Gist actualizado con éxito!")
+              else:
+                  print(f"Error al actualizar Gist: {r.status_code}")
+          else:
+              print("No se pudo encontrar el enlace en la página web.")
+          '
