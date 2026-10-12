@@ -39,7 +39,7 @@ jobs:
           response = requests.get(web_url, headers=headers)
           html_content = response.text
 
-          match = re.search(r'https?://tecnotv\.club/[a-zA-Z0-9]{4}/lista4\.m3u', html_content)
+          match = re.search(r'https?://[^\s\"\'<>]+/[a-zA-Z0-9]{4}/lista4\.m3u', html_content)
 
           if match:
               nuevo_enlace = match.group(0)
